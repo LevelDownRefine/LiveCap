@@ -6,21 +6,11 @@ import tempfile
 import urllib.error
 import urllib.request
 
-DEFAULT_TEMPERATURE = 0.2
-
-
-def _load_ffmpeg():
-    import ffmpeg
-
-    return ffmpeg
-
-
 def build_prompt(script: str, video_duration: float) -> str:
     return (
-        "你将收到视频时长和原始文本，请输出适合烧录进视频的字幕时间轴。"
-        "请结合视频总时长规划字幕切分与时间分配，返回严格 JSON。"
+        "请根据视频总时长和原文输出字幕时间轴，返回严格 JSON。"
         '输出格式: {"subtitles":[{"start":"00:00:00,000","end":"00:00:02,000","text":"字幕内容"}]}。'
-        "不要输出 JSON 之外的任何内容。每条字幕简短、按时间升序排列，最后一条不要超过视频结尾。\n\n"
+        "不要输出 JSON 之外的任何内容。每条字幕简短，按时间顺序排列，且不要重叠。\n\n"
         f"视频总时长(秒): {video_duration:.3f}\n\n"
         f"原文:\n{script.strip()}"
     )
@@ -35,7 +25,7 @@ def call_llm(prompt: str, model: str, api_key: str, base_url: str) -> str:
             {"role": "system", "content": "你是字幕整理助手"},
             {"role": "user", "content": prompt},
         ],
-        "temperature": DEFAULT_TEMPERATURE,
+        "temperature": 0.2,
     }
     req = urllib.request.Request(
         f"{base_url.rstrip('/')}/chat/completions",
@@ -110,7 +100,6 @@ def parse_timed_subtitles(llm_out: str) -> list[dict[str, float | str]]:
         raise ValueError("Invalid LLM response: missing subtitles list")
 
     parsed = []
-    prev_start = -1.0
     prev_end = 0.0
     for item in items:
         if not isinstance(item, dict):
@@ -130,40 +119,33 @@ def parse_timed_subtitles(llm_out: str) -> list[dict[str, float | str]]:
             raise ValueError("Invalid LLM response: subtitle start time cannot be negative")
         if end <= start:
             raise ValueError("Invalid LLM response: subtitle end time must be after start time")
-        if start < prev_start:
-            raise ValueError("Invalid LLM response: subtitles must be time-ordered")
         if start < prev_end:
-            raise ValueError("Invalid LLM response: subtitles must not overlap")
+            raise ValueError("Invalid LLM response: subtitles must be ordered and must not overlap")
         parsed.append({"start": start, "end": end, "text": text})
-        prev_start = start
         prev_end = end
     return parsed
 
 
 def segments_to_srt(segments: list[dict[str, float | str]]) -> str:
-    blocks = []
-    for i, segment in enumerate(segments, start=1):
-        blocks.append(
-            f"{i}\n{_fmt_ts(float(segment['start']))} --> {_fmt_ts(float(segment['end']))}\n{segment['text']}\n"
-        )
-    return "\n".join(blocks)
+    return "\n".join(
+        f"{i}\n{_fmt_ts(float(segment['start']))} --> {_fmt_ts(float(segment['end']))}\n{segment['text']}\n"
+        for i, segment in enumerate(segments, start=1)
+    )
 
 
 def lines_to_srt(lines: list[str], sec_per_line: float = 2.0) -> str:
-    segments = []
-    for i, line in enumerate([x.strip() for x in lines if x.strip()], start=1):
-        segments.append(
-            {
-                "start": (i - 1) * sec_per_line,
-                "end": i * sec_per_line,
-                "text": line,
-            }
-        )
-    return segments_to_srt(segments)
+    return segments_to_srt(
+        [
+            {"start": (i - 1) * sec_per_line, "end": i * sec_per_line, "text": line.strip()}
+            for i, line in enumerate(lines, start=1)
+            if line.strip()
+        ]
+    )
 
 
 def get_video_duration(input_video: str) -> float:
-    ffmpeg = _load_ffmpeg()
+    import ffmpeg
+
     probe = ffmpeg.probe(input_video)
     duration = (probe.get("format") or {}).get("duration")
     if duration is not None:
@@ -176,7 +158,8 @@ def get_video_duration(input_video: str) -> float:
 
 
 def render_with_ffmpeg(input_video: str, subtitle_srt: str, output_video: str) -> None:
-    ffmpeg = _load_ffmpeg()
+    import ffmpeg
+
     safe_subtitle_path = (
         os.path.abspath(subtitle_srt)
         .replace("\\", "\\\\")
