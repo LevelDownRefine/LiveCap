@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import tempfile
+import urllib.error
 import urllib.request
 
 
@@ -33,9 +34,19 @@ def call_llm(prompt: str, model: str, api_key: str, base_url: str) -> str:
         },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return data["choices"][0]["message"]["content"].strip()
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+        raise RuntimeError(f"LLM API call failed: {exc}") from exc
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError("Invalid LLM response: missing choices")
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("Invalid LLM response: missing message content")
+    return content.strip()
 
 
 def _fmt_ts(seconds: float) -> str:
@@ -61,8 +72,14 @@ def lines_to_srt(lines: list[str], sec_per_line: float = 2.0) -> str:
 def render_with_ffmpeg(input_video: str, subtitle_srt: str, output_video: str) -> None:
     import ffmpeg
 
+    safe_subtitle_path = (
+        os.path.abspath(subtitle_srt)
+        .replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+    )
     src = ffmpeg.input(input_video)
-    video = src.video.filter("subtitles", subtitle_srt)
+    video = src.video.filter("subtitles", safe_subtitle_path)
     audio = src.audio
     (
         ffmpeg.output(video, audio, output_video)
@@ -76,8 +93,8 @@ def run(input_video: str, output_video: str, script: str, model: str, base_url: 
     llm_out = call_llm(prompt, model=model, api_key=api_key, base_url=base_url)
     srt_text = lines_to_srt(llm_out.splitlines())
 
-    fd, srt_path = tempfile.mkstemp(suffix=".srt")
-    os.close(fd)
+    with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as tmp:
+        srt_path = tmp.name
     try:
         with open(srt_path, "w", encoding="utf-8") as f:
             f.write(srt_text)
