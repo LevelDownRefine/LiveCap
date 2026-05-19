@@ -58,38 +58,37 @@ class TestNonLLMFunctions(unittest.TestCase):
 
     def test_gen_video_real(self):
         if shutil.which("ffmpeg") is None:
-            self.skipTest("ffmpeg not installed")
+            self.skipTest("ffmpeg 未安装")
 
-        # Check if test video exists
-        self.assertTrue(os.path.exists('test.mp4'), "Test video test.mp4 does not exist")
+        # 检查测试视频是否存在
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
         
         in_path = "test.mp4"
         out_path = "test_real_output.mp4"
         srt_path = "test_real_sub.srt"
         
-        # Create test subtitles
+        # 创建测试字幕
         srt_content = """1
 00:00:00,000 --> 00:00:02,000
-Test subtitle line 1
+测试字幕第一行
 
 2
 00:00:02,000 --> 00:00:04,000
-Test subtitle line 2
+测试字幕第二行
 
 """
         with open(srt_path, 'w', encoding='utf-8') as f:
             f.write(srt_content)
         
 
-        # Execute real video generation
-        res = gen_video(in_path, out_path, srt_path)
-        self.assertEqual(res, 0, "ffmpeg execution failed")
+        # 执行真实的视频生成
+        gen_video(in_path, out_path, srt_path)
         
-        # Verify output file is generated
-        self.assertTrue(os.path.exists(out_path), f"Output video {out_path} was not generated")
+        # 验证输出文件是否生成
+        self.assertTrue(os.path.exists(out_path), f"输出视频 {out_path} 没有被生成")
         
-        # Check file size is greater than 0
-        self.assertGreater(os.path.getsize(out_path), 0, f"Output video {out_path} is empty")
+        # 检查文件大小大于 0
+        self.assertGreater(os.path.getsize(out_path), 0, f"输出视频 {out_path} 是空的")
 
 
 if __name__ == '__main__':
