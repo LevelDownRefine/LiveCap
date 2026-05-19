@@ -38,7 +38,7 @@ class SubtitleAgent:
         self.model = model
         self._client = OpenAI(api_key=api_key, base_url=base_url)
 
-    def run(
+    def run_once(
         self,
         text_list: list[str],
         in_video: str,
