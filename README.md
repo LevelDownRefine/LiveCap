@@ -17,5 +17,5 @@ pip install -r requirements.txt
 ## 使用
 
 ```bash
-python /home/runner/work/LiveCap/LiveCap/livecap_subtitle_agent.py input.mp4 output.mp4
+python livecap_subtitle_agent.py input.mp4 output.mp4
 ```
