@@ -202,6 +202,10 @@ cython_debug/
 # .vscode/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
+test_real_output.mp4
+test_real_sub.srt
+sub.srt
+sub_out.mp4
 
 # Ruff stuff:
 .ruff_cache/
