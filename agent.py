@@ -1,8 +1,6 @@
 from openai import OpenAI
 import os
 
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
-
 # 外部独立工具函数
 def get_prompt(texts: list[str]) -> str:
     '''通过提示词，使得大模型输出格式化'''
@@ -36,7 +34,7 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
 
 
 class SubtitleAgent:
-    def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1", model: str = "gpt-3.5-turbo"):
         self.model = model
         self._client = OpenAI(api_key=api_key, base_url=base_url)
 
