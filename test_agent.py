@@ -61,36 +61,36 @@ class TestNonLLMFunctions(unittest.TestCase):
         if shutil.which("ffmpeg") is None:
             self.skipTest("ffmpeg not installed")
 
-        # 检查测试视频是否存在
-        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+        # Check if test video exists
+        self.assertTrue(os.path.exists('test.mp4'), "Test video test.mp4 does not exist")
         
         in_path = "test.mp4"
         out_path = "test_real_output.mp4"
         srt_path = "test_real_sub.srt"
         
-        # 创建测试字幕
+        # Create test subtitles
         srt_content = """1
 00:00:00,000 --> 00:00:02,000
-测试字幕第一行
+Test subtitle line 1
 
 2
 00:00:02,000 --> 00:00:04,000
-测试字幕第二行
+Test subtitle line 2
 
 """
         with open(srt_path, 'w', encoding='utf-8') as f:
             f.write(srt_content)
         
 
-        # 执行真实的视频生成
+        # Execute real video generation
         res = gen_video(in_path, out_path, srt_path)
         self.assertEqual(res, 0, "ffmpeg execution failed")
         
-        # 验证输出文件是否生成
-        self.assertTrue(os.path.exists(out_path), f"输出视频 {out_path} 没有被生成")
+        # Verify output file is generated
+        self.assertTrue(os.path.exists(out_path), f"Output video {out_path} was not generated")
         
-        # 检查文件大小大于 0
-        self.assertGreater(os.path.getsize(out_path), 0, f"输出视频 {out_path} 是空的")
+        # Check file size is greater than 0
+        self.assertGreater(os.path.getsize(out_path), 0, f"Output video {out_path} is empty")
 
 
 class TestSubtitleAgent(unittest.TestCase):
@@ -99,12 +99,12 @@ class TestSubtitleAgent(unittest.TestCase):
     @patch("agent.save_llm_result")
     @patch("agent.llm_inference")
     def test_run_accepts_paths_as_parameters(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
-        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\n测试字幕\n"
+        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\nTest subtitle\n"
         mock_gen_video.return_value = 0
 
         agent = SubtitleAgent(api_key="test-key")
         result = agent.run(
-            ["测试文案"],
+            ["Test copy"],
             in_video="input.mp4",
             out_video="output.mp4",
             srt_path="output.srt",
@@ -121,14 +121,14 @@ class TestSubtitleAgent(unittest.TestCase):
     @patch("agent.save_llm_result")
     @patch("agent.llm_inference")
     def test_run_raises_when_video_generation_fails(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
-        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\n测试字幕\n"
+        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\nTest subtitle\n"
         mock_gen_video.return_value = 1
 
         agent = SubtitleAgent(api_key="test-key")
 
         with self.assertRaises(RuntimeError):
             agent.run(
-                ["测试文案"],
+                ["Test copy"],
                 in_video="input.mp4",
                 out_video="output.mp4",
                 srt_path="output.srt",
