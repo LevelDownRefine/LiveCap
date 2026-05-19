@@ -34,11 +34,14 @@ pip install openai
 from agent import SubtitleAgent
 
 agent = SubtitleAgent(api_key="YOUR_OPENAI_API_KEY")
-output_path = agent.run(["第一句文案", "第二句文案"])
+output_path = agent.run_once(
+    ["第一句文案", "第二句文案"],
+    in_video="src.mp4",
+    out_video="sub_out.mp4",
+    srt_path="sub.srt",
+)
 print(output_path)
 ```
-
-默认输入视频文件名为 `src.mp4`，输出视频文件名为 `sub_out.mp4`，生成的字幕文件名为 `sub.srt`。
 
 ## 运行测试
 

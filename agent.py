@@ -28,23 +28,25 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
     in_path = os.path.abspath(in_path)
     out_path = os.path.abspath(out_path)
     res = os.system(f'ffmpeg -i "{in_path}" -i "{srt_path}" -c:v copy -c:a copy -c:s mov_text "{out_path}" -y')
-    assert res == 0
+    if res != 0:
+        raise RuntimeError(f"FFmpeg执行失败，退出码: {res}")
     print(f"成功输出：{out_path}")
 
 
 class SubtitleAgent:
     def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1", model: str = "gpt-3.5-turbo"):
-        self.api_key = api_key
-        self.base_url = base_url
         self.model = model
-        self.in_video = "src.mp4"
-        self.out_video = "sub_out.mp4"
-        self.srt_path = "sub.srt"
-        self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
 
-    def run(self, text_list: list[str]) -> str:
+    def run_once(
+        self,
+        text_list: list[str],
+        in_video: str,
+        out_video: str,
+        srt_path: str,
+    ) -> str:
         prompt = get_prompt(text_list)
         llm_result = llm_inference(self._client, self.model, prompt)
-        save_llm_result(self.srt_path, llm_result)
-        gen_video(self.in_video, self.out_video, self.srt_path)
-        return self.out_video
+        save_llm_result(srt_path, llm_result)
+        gen_video(in_video, out_video, srt_path)
+        return out_video
