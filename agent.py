@@ -30,10 +30,9 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
     in_path = os.path.abspath(in_path)
     out_path = os.path.abspath(out_path)
     res = os.system(f'ffmpeg -i "{in_path}" -i "{srt_path}" -c:v copy -c:a copy -c:s mov_text "{out_path}" -y')
-    if res == 0:
-        print(f"Successfully output: {out_path}")
-    else:
-        print(f"FFmpeg failed with exit code {res}")
+    if res != 0:
+        raise RuntimeError(f"FFmpeg failed with exit code {res}")
+    print(f"Successfully output: {out_path}")
     return res
 
 
@@ -52,7 +51,5 @@ class SubtitleAgent:
         prompt = get_prompt(text_list)
         llm_result = llm_inference(self._client, self.model, prompt)
         save_llm_result(srt_path, llm_result)
-        res = gen_video(in_video, out_video, srt_path)
-        if res != 0:
-            raise RuntimeError(f"FFmpeg failed with exit code {res}")
+        gen_video(in_video, out_video, srt_path)
         return out_video

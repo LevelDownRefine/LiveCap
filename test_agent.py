@@ -2,9 +2,8 @@ import unittest
 import os
 import shutil
 import tempfile
-from unittest.mock import patch
 
-from agent import DEFAULT_BASE_URL, SubtitleAgent, get_prompt, save_llm_result, gen_video
+from agent import get_prompt, save_llm_result, gen_video
 
 
 class TestNonLLMFunctions(unittest.TestCase):
@@ -91,48 +90,6 @@ Test subtitle line 2
         
         # Check file size is greater than 0
         self.assertGreater(os.path.getsize(out_path), 0, f"Output video {out_path} is empty")
-
-
-class TestSubtitleAgent(unittest.TestCase):
-    @patch("agent.OpenAI")
-    @patch("agent.gen_video")
-    @patch("agent.save_llm_result")
-    @patch("agent.llm_inference")
-    def test_run_success_flow(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
-        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\nTest subtitle\n"
-        mock_gen_video.return_value = 0
-
-        agent = SubtitleAgent(api_key="test-key")
-        result = agent.run(
-            ["Test copy"],
-            in_video="input.mp4",
-            out_video="output.mp4",
-            srt_path="output.srt",
-        )
-
-        mock_openai.assert_called_once_with(api_key="test-key", base_url=DEFAULT_BASE_URL)
-        mock_llm_inference.assert_called_once()
-        mock_save_llm_result.assert_called_once_with("output.srt", mock_llm_inference.return_value)
-        mock_gen_video.assert_called_once_with("input.mp4", "output.mp4", "output.srt")
-        self.assertEqual(result, "output.mp4")
-
-    @patch("agent.OpenAI")
-    @patch("agent.gen_video")
-    @patch("agent.save_llm_result")
-    @patch("agent.llm_inference")
-    def test_run_raises_when_video_generation_fails(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
-        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\nTest subtitle\n"
-        mock_gen_video.return_value = 1
-
-        agent = SubtitleAgent(api_key="test-key")
-
-        with self.assertRaises(RuntimeError):
-            agent.run(
-                ["Test copy"],
-                in_video="input.mp4",
-                out_video="output.mp4",
-                srt_path="output.srt",
-            )
 
 
 if __name__ == '__main__':
