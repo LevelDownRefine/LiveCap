@@ -1,5 +1,6 @@
 import unittest
 import os
+import shutil
 import tempfile
 from unittest.mock import patch
 
@@ -57,6 +58,9 @@ class TestNonLLMFunctions(unittest.TestCase):
         self.assertEqual(saved_content, "")
 
     def test_gen_video_real(self):
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg 未安装")
+
         # 检查测试视频是否存在
         self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
         
@@ -79,7 +83,8 @@ class TestNonLLMFunctions(unittest.TestCase):
         
 
         # 执行真实的视频生成
-        gen_video(in_path, out_path, srt_path)
+        res = gen_video(in_path, out_path, srt_path)
+        self.assertEqual(res, 0, "ffmpeg 未成功执行")
         
         # 验证输出文件是否生成
         self.assertTrue(os.path.exists(out_path), f"输出视频 {out_path} 没有被生成")
@@ -95,6 +100,7 @@ class TestSubtitleAgent(unittest.TestCase):
     @patch("agent.llm_inference")
     def test_run_accepts_paths_as_parameters(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
         mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\n测试字幕\n"
+        mock_gen_video.return_value = 0
 
         agent = SubtitleAgent(api_key="test-key")
         result = agent.run(
@@ -109,6 +115,24 @@ class TestSubtitleAgent(unittest.TestCase):
         mock_save_llm_result.assert_called_once_with("output.srt", mock_llm_inference.return_value)
         mock_gen_video.assert_called_once_with("input.mp4", "output.mp4", "output.srt")
         self.assertEqual(result, "output.mp4")
+
+    @patch("agent.OpenAI")
+    @patch("agent.gen_video")
+    @patch("agent.save_llm_result")
+    @patch("agent.llm_inference")
+    def test_run_raises_when_video_generation_fails(self, mock_llm_inference, mock_save_llm_result, mock_gen_video, mock_openai):
+        mock_llm_inference.return_value = "1\n00:00:00,000 --> 00:00:01,000\n测试字幕\n"
+        mock_gen_video.return_value = 1
+
+        agent = SubtitleAgent(api_key="test-key")
+
+        with self.assertRaises(RuntimeError):
+            agent.run(
+                ["测试文案"],
+                in_video="input.mp4",
+                out_video="output.mp4",
+                srt_path="output.srt",
+            )
 
 
 if __name__ == '__main__':
