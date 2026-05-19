@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 - `LIVECAP_API_KEY`
 - `LIVECAP_MODEL`（可选）
-- `LIVECAP_BASE_URL`（可选，默认 OpenAI Responses API）
+- `LIVECAP_BASE_URL`（可选，默认 `https://api.openai.com/v1`）
 
 ## 使用
 

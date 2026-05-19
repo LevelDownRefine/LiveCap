@@ -3,8 +3,6 @@ import base64
 import json
 import os
 import tempfile
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -13,6 +11,11 @@ try:
     import ffmpeg as _ffmpeg_module
 except ImportError:  # pragma: no cover - exercised in runtime environments without the dependency.
     _ffmpeg_module = None
+
+try:
+    from openai import OpenAI as _OpenAIClient
+except ImportError:  # pragma: no cover - exercised in runtime environments without the dependency.
+    _OpenAIClient = None
 
 
 POSITION_TO_ALIGNMENT = {
@@ -36,21 +39,8 @@ class SubtitleSegment:
     position: str = "bottom"
 
 
-class SubtitleAgent:
-    def __init__(
-        self,
-        api_key: str | None = None,
-        model: str | None = None,
-        endpoint: str | None = None,
-    ) -> None:
-        self.api_key = api_key or os.environ["LIVECAP_API_KEY"]
-        self.model = model or os.environ.get("LIVECAP_MODEL", "gpt-4.1")
-        self.endpoint = endpoint or os.environ.get(
-            "LIVECAP_BASE_URL",
-            "https://api.openai.com/v1/responses",
-        )
-
-    def build_prompt(self) -> str:
+class SubtitlePromptBuilder:
+    def build(self) -> str:
         return (
             "请直接阅读视频并输出字幕规划结果。"
             "你必须只返回 JSON，格式为 "
@@ -58,6 +48,28 @@ class SubtitleAgent:
             "position 只能是 top、center、bottom、top_left、top_right、middle_left、middle_right、bottom_left、bottom_right。"
             "只在有必要时添加字幕，时间连续且不重叠，text 为最终字幕内容。"
         )
+
+
+class SubtitleAgent:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        client=None,
+        prompt_builder: SubtitlePromptBuilder | None = None,
+    ) -> None:
+        self.api_key = api_key or os.environ["LIVECAP_API_KEY"]
+        self.model = model or os.environ.get("LIVECAP_MODEL", "gpt-4.1")
+        self.base_url = base_url or os.environ.get(
+            "LIVECAP_BASE_URL",
+            "https://api.openai.com/v1",
+        )
+        self.prompt_builder = prompt_builder or SubtitlePromptBuilder()
+        self.client = client or self._build_client()
+
+    def build_prompt(self) -> str:
+        return self.prompt_builder.build()
 
     def generate(self, video_path: str, output_path: str) -> str:
         segments = self.analyze_video(video_path)
@@ -68,9 +80,9 @@ class SubtitleAgent:
         return output_path
 
     def analyze_video(self, video_path: str) -> list[SubtitleSegment]:
-        payload = {
-            "model": self.model,
-            "input": [
+        response = self.client.responses.create(
+            model=self.model,
+            input=[
                 {
                     "role": "user",
                     "content": [
@@ -83,50 +95,9 @@ class SubtitleAgent:
                     ],
                 }
             ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "subtitle_segments",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "segments": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "start": {"type": "string"},
-                                        "end": {"type": "string"},
-                                        "text": {"type": "string"},
-                                        "position": {"type": "string"},
-                                    },
-                                    "required": ["start", "end", "text", "position"],
-                                    "additionalProperties": False,
-                                },
-                            }
-                        },
-                        "required": ["segments"],
-                        "additionalProperties": False,
-                    },
-                }
-            },
-        }
-        request = urllib.request.Request(
-            self.endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+            text={"format": self._response_format()},
         )
-        try:
-            with urllib.request.urlopen(request) as response:
-                data = json.load(response)
-        except urllib.error.HTTPError as exc:  # pragma: no cover - network path
-            detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"LLM request failed: {detail}") from exc
-        return self.parse_segments(self._extract_output_text(data))
+        return self.parse_segments(self._extract_output_text(response))
 
     def write_ass(self, ass_path: str | Path, segments: Iterable[SubtitleSegment]) -> None:
         body = [
@@ -183,13 +154,46 @@ class SubtitleAgent:
         video_bytes = Path(video_path).read_bytes()
         return "data:video/mp4;base64," + base64.b64encode(video_bytes).decode("ascii")
 
-    def _extract_output_text(self, data: dict) -> str:
-        if data.get("output_text"):
-            return data["output_text"]
-        for item in data.get("output", []):
-            for content in item.get("content", []):
-                if content.get("type") == "output_text":
-                    return content["text"]
+    def _build_client(self):
+        if _OpenAIClient is None:
+            raise RuntimeError("openai is required. Install openai first.")
+        return _OpenAIClient(api_key=self.api_key, base_url=self.base_url)
+
+    def _response_format(self) -> dict:
+        return {
+            "type": "json_schema",
+            "name": "subtitle_segments",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "segments": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "start": {"type": "string"},
+                                "end": {"type": "string"},
+                                "text": {"type": "string"},
+                                "position": {"type": "string"},
+                            },
+                            "required": ["start", "end", "text", "position"],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                "required": ["segments"],
+                "additionalProperties": False,
+            },
+        }
+
+    def _extract_output_text(self, response) -> str:
+        output_text = getattr(response, "output_text", None)
+        if output_text:
+            return output_text
+        for item in getattr(response, "output", []):
+            for content in getattr(item, "content", []):
+                if getattr(content, "type", None) == "output_text":
+                    return content.text
         raise RuntimeError("LLM response does not contain output_text.")
 
     def _escape_ass_text(self, text: str) -> str:

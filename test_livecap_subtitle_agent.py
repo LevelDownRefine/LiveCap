@@ -1,22 +1,40 @@
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
 
 import livecap_subtitle_agent
-from livecap_subtitle_agent import POSITION_TO_ALIGNMENT, SubtitleAgent, SubtitleSegment
+from livecap_subtitle_agent import (
+    POSITION_TO_ALIGNMENT,
+    SubtitleAgent,
+    SubtitlePromptBuilder,
+    SubtitleSegment,
+)
 
 
 class SubtitleAgentTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.agent = SubtitleAgent(api_key="token", model="model", endpoint="https://example.com")
+        self.client = mock.Mock()
+        self.agent = SubtitleAgent(
+            api_key="token",
+            model="model",
+            base_url="https://example.com/v1",
+            client=self.client,
+        )
 
-    def test_build_prompt_mentions_json_and_positions(self) -> None:
-        prompt = self.agent.build_prompt()
+    def test_prompt_builder_mentions_json_and_positions(self) -> None:
+        prompt = SubtitlePromptBuilder().build()
         self.assertIn('"segments"', prompt)
         self.assertIn("position", prompt)
         self.assertIn("bottom_right", prompt)
+
+    def test_agent_build_prompt_comes_from_prompt_builder(self) -> None:
+        prompt_builder = mock.Mock(build=mock.Mock(return_value="PROMPT"))
+        agent = SubtitleAgent(api_key="token", model="model", client=self.client, prompt_builder=prompt_builder)
+        self.assertEqual(agent.build_prompt(), "PROMPT")
+        prompt_builder.build.assert_called_once_with()
 
     def test_parse_segments_accepts_code_fence(self) -> None:
         segments = self.agent.parse_segments(
@@ -41,13 +59,13 @@ class SubtitleAgentTests(unittest.TestCase):
         self.assertIn(r"{\an9}a\{b\}\Nline", content)
         self.assertEqual(POSITION_TO_ALIGNMENT["top_right"], 9)
 
-    def test_analyze_video_posts_prompt_and_file(self) -> None:
+    def test_analyze_video_uses_openai_client_with_prompt_and_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             video_path = Path(temp_dir) / "clip.mp4"
             video_path.write_bytes(b"video")
 
-            response_body = {
-                "output_text": json.dumps(
+            self.client.responses.create.return_value = SimpleNamespace(
+                output_text=json.dumps(
                     {
                         "segments": [
                             {
@@ -59,21 +77,15 @@ class SubtitleAgentTests(unittest.TestCase):
                         ]
                     }
                 )
-            }
-
-            with mock.patch("urllib.request.urlopen") as urlopen:
-                urlopen.return_value.__enter__.return_value = mock.Mock(
-                    read=mock.Mock(return_value=json.dumps(response_body).encode("utf-8"))
-                )
-                segments = self.agent.analyze_video(str(video_path))
-
-                request = urlopen.call_args.args[0]
-                payload = json.loads(request.data.decode("utf-8"))
+            )
+            segments = self.agent.analyze_video(str(video_path))
+            payload = self.client.responses.create.call_args.kwargs
 
         self.assertEqual(segments[0].text, "字幕")
         self.assertEqual(payload["model"], "model")
         self.assertEqual(payload["input"][0]["content"][0]["text"], self.agent.build_prompt())
         self.assertTrue(payload["input"][0]["content"][1]["file_data"].startswith("data:video/mp4;base64,"))
+        self.assertEqual(payload["text"]["format"]["type"], "json_schema")
 
     def test_render_video_uses_ffmpeg_python_chain(self) -> None:
         fake_stream = mock.Mock()
@@ -98,6 +110,14 @@ class SubtitleAgentTests(unittest.TestCase):
         )
         fake_stream.overwrite_output.assert_called_once_with()
         fake_stream.run.assert_called_once_with()
+
+    def test_build_client_uses_openai_sdk(self) -> None:
+        fake_client = object()
+        with mock.patch.object(livecap_subtitle_agent, "_OpenAIClient", return_value=fake_client) as openai_class:
+            agent = SubtitleAgent(api_key="token", model="model", base_url="https://example.com/v1", client=None)
+
+        self.assertIs(agent.client, fake_client)
+        openai_class.assert_called_once_with(api_key="token", base_url="https://example.com/v1")
 
 
 if __name__ == "__main__":
