@@ -93,7 +93,7 @@ class SubtitleAgentTests(unittest.TestCase):
         fake_ffmpeg.input.assert_called_once_with(video_path)
         fake_input_stream.output.assert_called_once_with(
             output_path,
-            vf=f"ass={ass_path}",
+            vf=f"ass={self.agent._escape_filter_path(ass_path)}",
             acodec="copy",
         )
         fake_stream.overwrite_output.assert_called_once_with()
