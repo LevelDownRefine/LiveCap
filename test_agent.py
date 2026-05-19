@@ -57,8 +57,7 @@ class TestNonLLMFunctions(unittest.TestCase):
         self.assertEqual(saved_content, "")
 
     def test_gen_video_real(self):
-        if shutil.which("ffmpeg") is None:
-            self.skipTest("ffmpeg 未安装")
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
 
         # 检查测试视频是否存在
         self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
