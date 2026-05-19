@@ -111,22 +111,32 @@ def parse_timed_subtitles(llm_out: str) -> list[dict[str, float | str]]:
 
     parsed = []
     prev_start = -1.0
+    prev_end = 0.0
     for item in items:
         if not isinstance(item, dict):
             raise ValueError("Invalid LLM response: each subtitle must be an object")
         text = str(item.get("text", "")).strip()
         if not text:
             raise ValueError("Invalid LLM response: subtitle text is required")
-        start = _parse_ts(item.get("start"))
-        end = _parse_ts(item.get("end"))
+        raw_start = item.get("start")
+        if raw_start is None:
+            raise ValueError("Invalid LLM response: subtitle start time is required")
+        raw_end = item.get("end")
+        if raw_end is None:
+            raise ValueError("Invalid LLM response: subtitle end time is required")
+        start = _parse_ts(raw_start)
+        end = _parse_ts(raw_end)
         if start < 0:
             raise ValueError("Invalid LLM response: subtitle start time cannot be negative")
         if end <= start:
             raise ValueError("Invalid LLM response: subtitle end time must be after start time")
         if start < prev_start:
             raise ValueError("Invalid LLM response: subtitles must be time-ordered")
+        if start < prev_end:
+            raise ValueError("Invalid LLM response: subtitles must not overlap")
         parsed.append({"start": start, "end": end, "text": text})
         prev_start = start
+        prev_end = end
     return parsed
 
 

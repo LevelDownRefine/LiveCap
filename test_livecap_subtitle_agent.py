@@ -28,6 +28,12 @@ class SubtitleAgentTests(unittest.TestCase):
         self.assertEqual(1.5, items[0]["end"])
         self.assertEqual("第二句", items[1]["text"])
 
+    def test_build_prompt_formats_short_and_long_durations(self):
+        short_prompt = build_prompt("短视频", video_duration=0.125)
+        long_prompt = build_prompt("长视频", video_duration=3723.4)
+        self.assertIn("0.125", short_prompt)
+        self.assertIn("3723.400", long_prompt)
+
     def test_lines_to_srt_generates_timestamps(self):
         srt = lines_to_srt(["第一句", "第二句"], sec_per_line=1.5)
         self.assertTrue(srt.startswith("1\n"))
