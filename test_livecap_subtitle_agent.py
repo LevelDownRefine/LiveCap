@@ -82,7 +82,7 @@ class SubtitleAgentTests(unittest.TestCase):
         fake_ffmpeg = mock.Mock(input=mock.Mock(return_value=fake_input_stream))
         fake_stream.overwrite_output.return_value = fake_stream
 
-        with mock.patch.object(livecap_subtitle_agent, "ffmpeg", fake_ffmpeg):
+        with mock.patch.object(livecap_subtitle_agent, "_ffmpeg_module", fake_ffmpeg):
             self.agent.render_video("/tmp/in.mp4", "/tmp/subtitles.ass", "/tmp/out.mp4")
 
         fake_ffmpeg.input.assert_called_once_with("/tmp/in.mp4")

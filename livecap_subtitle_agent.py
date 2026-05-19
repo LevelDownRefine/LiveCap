@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Iterable
 
 try:
-    import ffmpeg
+    import ffmpeg as _ffmpeg_module
 except ImportError:  # pragma: no cover - exercised in runtime environments without the dependency.
-    ffmpeg = None
+    _ffmpeg_module = None
 
 
 POSITION_TO_ALIGNMENT = {
@@ -154,11 +154,11 @@ class SubtitleAgent:
         Path(ass_path).write_text("\n".join(body) + "\n", encoding="utf-8")
 
     def render_video(self, video_path: str, ass_path: str | Path, output_path: str) -> None:
-        if ffmpeg is None:
+        if _ffmpeg_module is None:
             raise RuntimeError("ffmpeg-python is required. Install ffmpeg-python first.")
         filter_path = self._escape_filter_path(str(ass_path))
         (
-            ffmpeg.input(video_path)
+            _ffmpeg_module.input(video_path)
             .output(output_path, vf=f"ass={filter_path}", acodec="copy")
             .overwrite_output()
             .run()
