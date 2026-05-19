@@ -59,7 +59,7 @@ class TestNonLLMFunctions(unittest.TestCase):
 
     def test_gen_video_real(self):
         if shutil.which("ffmpeg") is None:
-            self.skipTest("ffmpeg 未安装")
+            self.skipTest("ffmpeg not installed")
 
         # 检查测试视频是否存在
         self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
@@ -84,7 +84,7 @@ class TestNonLLMFunctions(unittest.TestCase):
 
         # 执行真实的视频生成
         res = gen_video(in_path, out_path, srt_path)
-        self.assertEqual(res, 0, "ffmpeg 未成功执行")
+        self.assertEqual(res, 0, "ffmpeg execution failed")
         
         # 验证输出文件是否生成
         self.assertTrue(os.path.exists(out_path), f"输出视频 {out_path} 没有被生成")
