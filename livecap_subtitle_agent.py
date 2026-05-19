@@ -1,15 +1,19 @@
 import argparse
 import json
 import os
+import re
 import tempfile
 import urllib.error
 import urllib.request
 
 
-def build_prompt(script: str) -> str:
+def build_prompt(script: str, video_duration: float) -> str:
     return (
-        "请将下面文本拆成适合视频字幕的短句，每行不超过16个汉字。"
-        "仅输出字幕内容，每行一句，不要编号和解释。\n\n"
+        "你将收到视频时长和原始文本，请输出适合烧录进视频的字幕时间轴。"
+        "请结合视频总时长规划字幕切分与时间分配，返回严格 JSON。"
+        '输出格式: {"subtitles":[{"start":"00:00:00,000","end":"00:00:02,000","text":"字幕内容"}]}。'
+        "不要输出 JSON 之外的任何内容。每条字幕简短、按时间升序排列，最后一条不要超过视频结尾。\n\n"
+        f"视频总时长(秒): {video_duration:.3f}\n\n"
         f"原文:\n{script.strip()}"
     )
 
@@ -60,13 +64,96 @@ def _fmt_ts(seconds: float) -> str:
     return f"{hh:02d}:{mm:02d}:{ss:02d},{ms:03d}"
 
 
-def lines_to_srt(lines: list[str], sec_per_line: float = 2.0) -> str:
+def _parse_ts(value: str | int | float) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        raise ValueError(f"Unsupported timestamp value: {value!r}")
+    raw = value.strip()
+    if not raw:
+        raise ValueError("Empty timestamp")
+    if re.fullmatch(r"\d+(?:\.\d+)?", raw):
+        return float(raw)
+    match = re.fullmatch(r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})", raw)
+    if not match:
+        raise ValueError(f"Invalid timestamp format: {value!r}")
+    hh, mm, ss, ms = (int(part) for part in match.groups())
+    return hh * 3600 + mm * 60 + ss + ms / 1000
+
+
+def _strip_code_fences(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```") and stripped.endswith("```"):
+        lines = stripped.splitlines()
+        if len(lines) >= 3:
+            return "\n".join(lines[1:-1]).strip()
+    return stripped
+
+
+def parse_timed_subtitles(llm_out: str) -> list[dict[str, float | str]]:
+    payload = _strip_code_fences(llm_out)
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid LLM response: expected JSON subtitles") from exc
+
+    items = data.get("subtitles") if isinstance(data, dict) else data
+    if not isinstance(items, list) or not items:
+        raise ValueError("Invalid LLM response: missing subtitles list")
+
+    parsed = []
+    prev_start = -1.0
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid LLM response: each subtitle must be an object")
+        text = str(item.get("text", "")).strip()
+        if not text:
+            raise ValueError("Invalid LLM response: subtitle text is required")
+        start = _parse_ts(item.get("start"))
+        end = _parse_ts(item.get("end"))
+        if start < 0 or end <= start:
+            raise ValueError("Invalid LLM response: subtitle timestamps are invalid")
+        if start < prev_start:
+            raise ValueError("Invalid LLM response: subtitles must be time-ordered")
+        parsed.append({"start": start, "end": end, "text": text})
+        prev_start = start
+    return parsed
+
+
+def segments_to_srt(segments: list[dict[str, float | str]]) -> str:
     blocks = []
-    for i, line in enumerate([x.strip() for x in lines if x.strip()], start=1):
-        start = (i - 1) * sec_per_line
-        end = i * sec_per_line
-        blocks.append(f"{i}\n{_fmt_ts(start)} --> {_fmt_ts(end)}\n{line}\n")
+    for i, segment in enumerate(segments, start=1):
+        blocks.append(
+            f"{i}\n{_fmt_ts(float(segment['start']))} --> {_fmt_ts(float(segment['end']))}\n{segment['text']}\n"
+        )
     return "\n".join(blocks)
+
+
+def lines_to_srt(lines: list[str], sec_per_line: float = 2.0) -> str:
+    segments = []
+    for i, line in enumerate([x.strip() for x in lines if x.strip()], start=1):
+        segments.append(
+            {
+                "start": (i - 1) * sec_per_line,
+                "end": i * sec_per_line,
+                "text": line,
+            }
+        )
+    return segments_to_srt(segments)
+
+
+def get_video_duration(input_video: str) -> float:
+    import ffmpeg
+
+    probe = ffmpeg.probe(input_video)
+    duration = (probe.get("format") or {}).get("duration")
+    if duration is not None:
+        return float(duration)
+    for stream in probe.get("streams") or []:
+        duration = stream.get("duration")
+        if duration is not None:
+            return float(duration)
+    raise ValueError(f"Could not determine duration for video: {input_video}")
 
 
 def render_with_ffmpeg(input_video: str, subtitle_srt: str, output_video: str) -> None:
@@ -89,9 +176,10 @@ def render_with_ffmpeg(input_video: str, subtitle_srt: str, output_video: str) -
 
 
 def run(input_video: str, output_video: str, script: str, model: str, base_url: str, api_key: str) -> None:
-    prompt = build_prompt(script)
+    duration = get_video_duration(input_video)
+    prompt = build_prompt(script, video_duration=duration)
     llm_out = call_llm(prompt, model=model, api_key=api_key, base_url=base_url)
-    srt_text = lines_to_srt(llm_out.splitlines())
+    srt_text = segments_to_srt(parse_timed_subtitles(llm_out))
 
     with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as tmp:
         srt_path = tmp.name
