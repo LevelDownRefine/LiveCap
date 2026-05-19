@@ -29,7 +29,7 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
     out_path = os.path.abspath(out_path)
     res = os.system(f'ffmpeg -i "{in_path}" -i "{srt_path}" -c:v copy -c:a copy -c:s mov_text "{out_path}" -y')
     if res == 0:
-        print(f"成功输出：{out_path}")
+        print(f"Successfully output: {out_path}")
     return res
 
 
