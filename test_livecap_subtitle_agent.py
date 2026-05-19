@@ -82,13 +82,18 @@ class SubtitleAgentTests(unittest.TestCase):
         fake_ffmpeg = mock.Mock(input=mock.Mock(return_value=fake_input_stream))
         fake_stream.overwrite_output.return_value = fake_stream
 
-        with mock.patch.object(livecap_subtitle_agent, "_ffmpeg_module", fake_ffmpeg):
-            self.agent.render_video("/tmp/in.mp4", "/tmp/subtitles.ass", "/tmp/out.mp4")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video_path = str(Path(temp_dir) / "in.mp4")
+            ass_path = str(Path(temp_dir) / "subtitles.ass")
+            output_path = str(Path(temp_dir) / "out.mp4")
 
-        fake_ffmpeg.input.assert_called_once_with("/tmp/in.mp4")
+            with mock.patch.object(livecap_subtitle_agent, "_ffmpeg_module", fake_ffmpeg):
+                self.agent.render_video(video_path, ass_path, output_path)
+
+        fake_ffmpeg.input.assert_called_once_with(video_path)
         fake_input_stream.output.assert_called_once_with(
-            "/tmp/out.mp4",
-            vf="ass=/tmp/subtitles.ass",
+            output_path,
+            vf=f"ass={ass_path}",
             acodec="copy",
         )
         fake_stream.overwrite_output.assert_called_once_with()
