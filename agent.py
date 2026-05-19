@@ -37,14 +37,17 @@ class SubtitleAgent:
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
-        self.in_video = "src.mp4"
-        self.out_video = "sub_out.mp4"
-        self.srt_path = "sub.srt"
         self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-    def run(self, text_list: list[str]) -> str:
+    def run(
+        self,
+        text_list: list[str],
+        in_video: str = "src.mp4",
+        out_video: str = "sub_out.mp4",
+        srt_path: str = "sub.srt",
+    ) -> str:
         prompt = get_prompt(text_list)
         llm_result = llm_inference(self._client, self.model, prompt)
-        save_llm_result(self.srt_path, llm_result)
-        gen_video(self.in_video, self.out_video, self.srt_path)
-        return self.out_video
+        save_llm_result(srt_path, llm_result)
+        gen_video(in_video, out_video, srt_path)
+        return out_video
