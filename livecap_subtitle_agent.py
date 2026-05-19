@@ -6,6 +6,14 @@ import tempfile
 import urllib.error
 import urllib.request
 
+DEFAULT_TEMPERATURE = 0.2
+
+
+def _load_ffmpeg():
+    import ffmpeg
+
+    return ffmpeg
+
 
 def build_prompt(script: str, video_duration: float) -> str:
     return (
@@ -27,7 +35,7 @@ def call_llm(prompt: str, model: str, api_key: str, base_url: str) -> str:
             {"role": "system", "content": "你是字幕整理助手"},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.2,
+        "temperature": DEFAULT_TEMPERATURE,
     }
     req = urllib.request.Request(
         f"{base_url.rstrip('/')}/chat/completions",
@@ -145,8 +153,7 @@ def lines_to_srt(lines: list[str], sec_per_line: float = 2.0) -> str:
 
 
 def get_video_duration(input_video: str) -> float:
-    import ffmpeg
-
+    ffmpeg = _load_ffmpeg()
     probe = ffmpeg.probe(input_video)
     duration = (probe.get("format") or {}).get("duration")
     if duration is not None:
@@ -159,8 +166,7 @@ def get_video_duration(input_video: str) -> float:
 
 
 def render_with_ffmpeg(input_video: str, subtitle_srt: str, output_video: str) -> None:
-    import ffmpeg
-
+    ffmpeg = _load_ffmpeg()
     safe_subtitle_path = (
         os.path.abspath(subtitle_srt)
         .replace("\\", "\\\\")

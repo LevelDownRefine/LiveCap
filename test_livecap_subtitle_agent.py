@@ -37,6 +37,7 @@ class SubtitleAgentTests(unittest.TestCase):
         self.assertIn("第一句", srt)
         self.assertIn("第二句", srt)
         self.assertIn("第一句\n\n2", srt)
+        self.assertTrue(srt.endswith("第二句\n"))
 
 
 if __name__ == "__main__":
