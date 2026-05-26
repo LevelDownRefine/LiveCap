@@ -3,7 +3,10 @@ import os
 import shutil
 import tempfile
 
-from agent import get_prompt, save_llm_result, gen_video
+from agent import (
+    get_prompt, save_llm_result, gen_video,
+    clip_video, concat_videos, change_speed, VideoEditor,
+)
 
 
 class TestNonLLMFunctions(unittest.TestCase):
@@ -88,6 +91,111 @@ class TestNonLLMFunctions(unittest.TestCase):
         
         # 检查文件大小大于 0
         self.assertGreater(os.path.getsize(out_path), 0, f"输出视频 {out_path} 是空的")
+
+
+    def test_clip_video(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_clip_output.mp4"
+        clip_video("test.mp4", out_path, "00:00:00", "00:00:02")
+
+        self.assertTrue(os.path.exists(out_path), f"剪辑输出 {out_path} 没有被生成")
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+    def test_concat_videos(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        # 先裁剪两段
+        seg1 = "test_seg1.mp4"
+        seg2 = "test_seg2.mp4"
+        clip_video("test.mp4", seg1, "00:00:00", "00:00:02")
+        clip_video("test.mp4", seg2, "00:00:02", "00:00:04")
+
+        out_path = "test_concat_output.mp4"
+        concat_videos([seg1, seg2], out_path)
+
+        self.assertTrue(os.path.exists(out_path))
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        for f in [seg1, seg2, out_path]:
+            if os.path.exists(f):
+                os.remove(f)
+
+    def test_change_speed(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_speed_output.mp4"
+        change_speed("test.mp4", out_path, 2.0)
+
+        self.assertTrue(os.path.exists(out_path))
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+    def test_change_speed_invalid(self):
+        with self.assertRaises(ValueError):
+            change_speed("test.mp4", "out.mp4", 0)
+
+    def test_video_editor_single_segment(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_editor_single.mp4"
+        VideoEditor("test.mp4").add_segment("00:00:00", "00:00:02").export(out_path)
+
+        self.assertTrue(os.path.exists(out_path))
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+    def test_video_editor_multi_segment(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_editor_multi.mp4"
+        (VideoEditor("test.mp4")
+            .add_segment("00:00:00", "00:00:02")
+            .add_segment("00:00:03", "00:00:04")
+            .export(out_path))
+
+        self.assertTrue(os.path.exists(out_path))
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+    def test_video_editor_with_speed(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_editor_speed.mp4"
+        (VideoEditor("test.mp4")
+            .add_segment("00:00:00", "00:00:04")
+            .set_speed(1.5)
+            .export(out_path))
+
+        self.assertTrue(os.path.exists(out_path))
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
+
+    def test_video_editor_no_segment_raises(self):
+        editor = VideoEditor("test.mp4")
+        with self.assertRaises(ValueError):
+            editor.export("out.mp4")
+
+    def test_video_editor_file_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            VideoEditor("nonexistent.mp4")
 
 
 if __name__ == '__main__':
