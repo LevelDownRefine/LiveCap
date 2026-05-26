@@ -1,5 +1,6 @@
 from openai import OpenAI
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -62,9 +63,24 @@ def change_speed(in_path: str, out_path: str, factor: float):
     in_path = os.path.abspath(in_path)
     out_path = os.path.abspath(out_path)
     video_filter = f"setpts={1/factor}*PTS"
-    audio_filter = f"atempo={factor}" if 0.5 <= factor <= 2.0 else f"atempo={max(0.5, min(2.0, factor))}"
+    # atempo 仅支持 0.5-2.0，超出范围需链式组合
+    audio_filter = _build_atempo_filter(factor)
     _run_ffmpeg(['-i', in_path, '-filter:v', video_filter, '-filter:a', audio_filter, out_path, '-y'])
     print(f"变速完成（{factor}x）：{out_path}")
+
+
+def _build_atempo_filter(factor: float) -> str:
+    '''构建 atempo 滤镜链，支持任意倍速'''
+    filters = []
+    remaining = factor
+    while remaining > 2.0:
+        filters.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5:
+        filters.append("atempo=0.5")
+        remaining /= 0.5
+    filters.append(f"atempo={remaining}")
+    return ",".join(filters)
 
 
 def _run_ffmpeg(args: list[str]):
@@ -131,7 +147,6 @@ class VideoEditor:
             out_path = os.path.abspath(out_path)
             _run_ffmpeg(['-i', merged, '-c', 'copy', out_path, '-y'])
         finally:
-            import shutil
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
         print(f"导出完成：{out_path}")
