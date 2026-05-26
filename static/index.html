@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LiveCap 视频剪辑</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+        h1 { text-align: center; margin-bottom: 24px; color: #00d4ff; }
+
+        .upload-area {
+            border: 2px dashed #444; border-radius: 12px; padding: 40px;
+            text-align: center; cursor: pointer; transition: border-color 0.2s;
+            margin-bottom: 24px;
+        }
+        .upload-area:hover { border-color: #00d4ff; }
+        .upload-area.has-file { border-color: #00d4ff; background: #16213e; }
+        .upload-area input { display: none; }
+
+        .player-section { margin-bottom: 24px; display: none; }
+        video { width: 100%; border-radius: 8px; background: #000; }
+
+        .editor-section { display: none; }
+        .card { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .card h3 { margin-bottom: 12px; color: #00d4ff; font-size: 14px; text-transform: uppercase; }
+
+        .segment { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+        .segment input { background: #0f3460; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; color: #eee; font-size: 14px; width: 130px; }
+        .segment button { background: #e94560; border: none; border-radius: 4px; padding: 6px 12px; color: #fff; cursor: pointer; font-size: 13px; }
+
+        .btn { border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer; font-weight: 600; }
+        .btn-primary { background: #00d4ff; color: #1a1a2e; }
+        .btn-secondary { background: #0f3460; color: #eee; border: 1px solid #444; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .speed-input { width: 70px; background: #0f3460; border: 1px solid #444; border-radius: 4px; padding: 6px 10px; color: #eee; font-size: 14px; }
+
+        .status { margin-top: 16px; padding: 12px; border-radius: 6px; display: none; }
+        .status.info { display: block; background: #0f3460; color: #00d4ff; }
+        .status.success { display: block; background: #1b4332; color: #95d5b2; }
+        .status.error { display: block; background: #3d0000; color: #ff6b6b; }
+
+        .output-section { display: none; margin-top: 24px; }
+        .output-section h3 { margin-bottom: 12px; color: #95d5b2; }
+
+        .time-hint { font-size: 12px; color: #888; margin-top: 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎬 LiveCap 视频剪辑</h1>
+
+    <!-- 上传区域 -->
+    <div class="upload-area" id="uploadArea">
+        <p>📁 点击或拖拽视频文件到此处上传</p>
+        <p style="font-size:12px; color:#888; margin-top:8px;">支持 MP4, MOV, AVI, MKV</p>
+        <input type="file" id="fileInput" accept="video/*">
+    </div>
+
+    <!-- 播放器 -->
+    <div class="player-section" id="playerSection">
+        <video id="videoPlayer" controls></video>
+        <p class="time-hint" id="videoDuration"></p>
+    </div>
+
+    <!-- 编辑器 -->
+    <div class="editor-section" id="editorSection">
+        <div class="card">
+            <h3>✂️ 剪辑片段</h3>
+            <div id="segmentList"></div>
+            <button class="btn btn-secondary" onclick="addSegment()">+ 添加片段</button>
+        </div>
+
+        <div class="card">
+            <h3>⚡ 速度调整</h3>
+            <div class="controls">
+                <label>倍速：</label>
+                <input type="number" class="speed-input" id="speedInput" value="1.0" min="0.25" max="4" step="0.25">
+                <span style="font-size:12px; color:#888;">（1.0=原速, 2.0=两倍速, 0.5=半速）</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="controls">
+                <button class="btn btn-primary" id="exportBtn" onclick="doExport()">🚀 导出视频</button>
+            </div>
+        </div>
+
+        <div class="status" id="statusMsg"></div>
+    </div>
+
+    <!-- 输出结果 -->
+    <div class="output-section" id="outputSection">
+        <h3>✅ 导出完成</h3>
+        <video id="outputPlayer" controls></video>
+        <div style="margin-top:12px;">
+            <a id="downloadLink" class="btn btn-primary" download>⬇️ 下载视频</a>
+        </div>
+    </div>
+</div>
+
+<script>
+let uploadedFilename = null;
+
+// 上传区域
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.style.borderColor = '#00d4ff'; });
+uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = '#444'; });
+uploadArea.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadArea.style.borderColor = '#444';
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+async function handleFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    uploadArea.innerHTML = '<p>⏳ 上传中...</p>';
+    try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error);
+
+        uploadedFilename = data.filename;
+        uploadArea.classList.add('has-file');
+        uploadArea.innerHTML = `<p>✅ 已上传: ${file.name}</p>`;
+
+        // 显示播放器
+        const player = document.getElementById('videoPlayer');
+        player.src = `/api/videos/${uploadedFilename}`;
+        document.getElementById('playerSection').style.display = 'block';
+
+        player.addEventListener('loadedmetadata', () => {
+            const dur = player.duration;
+            document.getElementById('videoDuration').textContent =
+                `视频时长: ${formatTime(dur)}`;
+        });
+
+        // 显示编辑器
+        document.getElementById('editorSection').style.display = 'block';
+        document.getElementById('outputSection').style.display = 'none';
+
+        // 添加默认片段
+        document.getElementById('segmentList').innerHTML = '';
+        addSegment();
+    } catch (e) {
+        uploadArea.innerHTML = `<p style="color:#ff6b6b;">上传失败: ${e.message}</p>`;
+    }
+}
+
+function formatTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${pad(h)}:${pad(m)}:${pad(s)}.${ms.toString().padStart(3, '0')}`;
+}
+function pad(n) { return n.toString().padStart(2, '0'); }
+
+function addSegment() {
+    const list = document.getElementById('segmentList');
+    const idx = list.children.length;
+    const div = document.createElement('div');
+    div.className = 'segment';
+    div.innerHTML = `
+        <span>#${idx + 1}</span>
+        <input type="text" placeholder="开始 00:00:00" value="00:00:00" class="seg-start">
+        <span>→</span>
+        <input type="text" placeholder="结束 00:00:05" value="00:00:05" class="seg-end">
+        <button onclick="useCurrentTime(this, 'start')">⏱ 当前为起点</button>
+        <button onclick="useCurrentTime(this, 'end')">⏱ 当前为终点</button>
+        <button onclick="this.parentElement.remove()">✖</button>
+    `;
+    list.appendChild(div);
+}
+
+function useCurrentTime(btn, type) {
+    const player = document.getElementById('videoPlayer');
+    const time = formatTime(player.currentTime);
+    const segment = btn.parentElement;
+    if (type === 'start') {
+        segment.querySelector('.seg-start').value = time;
+    } else {
+        segment.querySelector('.seg-end').value = time;
+    }
+}
+
+async function doExport() {
+    const segments = [];
+    document.querySelectorAll('.segment').forEach(seg => {
+        const start = seg.querySelector('.seg-start').value.trim();
+        const end = seg.querySelector('.seg-end').value.trim();
+        if (start && end) segments.push({ start, end });
+    });
+
+    if (!segments.length) {
+        showStatus('至少需要一个剪辑片段', 'error');
+        return;
+    }
+
+    const speed = parseFloat(document.getElementById('speedInput').value) || 1.0;
+
+    const body = { source: uploadedFilename, segments, speed };
+
+    const btn = document.getElementById('exportBtn');
+    btn.disabled = true;
+    showStatus('⏳ 正在处理，请稍候...', 'info');
+
+    try {
+        const resp = await fetch('/api/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error);
+
+        showStatus('✅ 导出成功！', 'success');
+
+        // 显示输出
+        const outputSection = document.getElementById('outputSection');
+        outputSection.style.display = 'block';
+        const outputPlayer = document.getElementById('outputPlayer');
+        outputPlayer.src = `/api/videos/${data.output}`;
+
+        const downloadLink = document.getElementById('downloadLink');
+        downloadLink.href = `/api/videos/${data.output}`;
+    } catch (e) {
+        showStatus(`❌ 导出失败: ${e.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.className = `status ${type}`;
+}
+</script>
+</body>
+</html>

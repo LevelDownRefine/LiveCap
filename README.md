@@ -91,3 +91,20 @@ python -m unittest -v
 
 - 已安装 `ffmpeg`
 - 已安装 `openai`
+
+## Web 前端
+
+启动剪辑服务：
+
+```bash
+pip install -r requirements.txt
+python server.py
+```
+
+浏览器打开 http://localhost:5000 即可使用可视化剪辑界面：
+
+1. 上传视频文件
+2. 在播放器中预览，点击"当前为起点/终点"快捷设置时间
+3. 添加多个剪辑片段
+4. 可选调整速度倍率
+5. 点击"导出视频"，完成后可直接下载
