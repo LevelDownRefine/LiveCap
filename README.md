@@ -43,6 +43,14 @@ output_path = agent.run_once(
 print(output_path)
 ```
 
+## 视频剪辑
+
+```python
+from agent import clip_video
+
+clip_video("src.mp4", "clip_out.mp4", start="00:00:05", end="00:00:15")
+```
+
 ## 运行测试
 
 ```bash

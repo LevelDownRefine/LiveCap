@@ -3,7 +3,7 @@ import os
 import shutil
 import tempfile
 
-from agent import get_prompt, save_llm_result, gen_video
+from agent import get_prompt, save_llm_result, gen_video, clip_video
 
 
 class TestNonLLMFunctions(unittest.TestCase):
@@ -88,6 +88,20 @@ class TestNonLLMFunctions(unittest.TestCase):
         
         # 检查文件大小大于 0
         self.assertGreater(os.path.getsize(out_path), 0, f"输出视频 {out_path} 是空的")
+
+
+    def test_clip_video(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg 未安装")
+        self.assertTrue(os.path.exists('test.mp4'), "测试视频 test.mp4 不存在")
+
+        out_path = "test_clip_output.mp4"
+        clip_video("test.mp4", out_path, "00:00:00", "00:00:02")
+
+        self.assertTrue(os.path.exists(out_path), f"剪辑输出 {out_path} 没有被生成")
+        self.assertGreater(os.path.getsize(out_path), 0)
+
+        if os.path.exists(out_path):
+            os.remove(out_path)
 
 
 if __name__ == '__main__':

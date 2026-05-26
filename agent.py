@@ -33,6 +33,16 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
     print(f"成功输出：{out_path}")
 
 
+def clip_video(in_path: str, out_path: str, start: str, end: str):
+    '''剪辑视频片段，start/end 格式如 "00:00:05" 或 "00:01:30.500"'''
+    in_path = os.path.abspath(in_path)
+    out_path = os.path.abspath(out_path)
+    res = os.system(f'ffmpeg -i "{in_path}" -ss {start} -to {end} -c copy "{out_path}" -y')
+    if res != 0:
+        raise RuntimeError(f"FFmpeg剪辑失败，退出码: {res}")
+    print(f"剪辑完成：{out_path}")
+
+
 class SubtitleAgent:
     def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1", model: str = "gpt-3.5-turbo"):
         self.model = model
