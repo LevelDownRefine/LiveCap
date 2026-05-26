@@ -53,11 +53,14 @@ def upload_video():
 
     ext = os.path.splitext(file.filename)[1].lower() or ".mp4"
     if ext not in ALLOWED_EXTENSIONS:
-        return jsonify({"error": f"不支持的文件格式: {ext}"}), 400
+        return jsonify({"error": "不支持的文件格式"}), 400
 
     file_id = uuid.uuid4().hex
     filename = f"{file_id}{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, filename))
+    # 确保路径在 UPLOAD_DIR 内
+    if not filepath.startswith(UPLOAD_DIR + os.sep):
+        return jsonify({"error": "文件路径无效"}), 400
     file.save(filepath)
 
     return jsonify({"id": file_id, "filename": filename})
@@ -123,8 +126,8 @@ def edit_video():
         if speed and speed != 1.0:
             editor.set_speed(speed)
         editor.export(out_path)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    except ValueError:
+        return jsonify({"error": "参数无效"}), 400
     except RuntimeError as e:
         return jsonify({"error": "视频处理失败"}), 500
 
@@ -141,4 +144,4 @@ def list_files():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="127.0.0.1", port=5000)

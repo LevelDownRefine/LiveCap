@@ -1,8 +1,12 @@
 from openai import OpenAI
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+
+# 合法时间格式: HH:MM:SS 或 HH:MM:SS.mmm
+_TIME_RE = re.compile(r"^\d{1,2}:\d{2}:\d{2}(?:\.\d{1,3})?$")
 
 # 外部独立工具函数
 def get_prompt(texts: list[str]) -> str:
@@ -36,6 +40,8 @@ def gen_video(in_path: str, out_path: str, srt_path: str):
 
 def clip_video(in_path: str, out_path: str, start: str, end: str):
     '''剪辑视频片段，start/end 格式如 "00:00:05" 或 "00:01:30.500"'''
+    if not _TIME_RE.match(start) or not _TIME_RE.match(end):
+        raise ValueError(f"时间格式无效，需要 HH:MM:SS 或 HH:MM:SS.mmm")
     in_path = os.path.abspath(in_path)
     out_path = os.path.abspath(out_path)
     _run_ffmpeg(['-i', in_path, '-ss', start, '-to', end, '-c', 'copy', out_path, '-y'])
